@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Queen of Kings — Matches</title>
+
+  <style>
+    :root {
+      --bg: #f9f9f9;
+      --text: #222;
+      --muted: #666;
+      --card: #ffffff;
+      --border: #d6d6d6;
+      --thead: #e4ecf7;
+      --hover: #d7f0ff;
+      --accent: #0b6bcb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 16px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title h1 {
+      font-size: 22px;
+      margin: 0;
+    }
+
+    .season-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    select {
+      padding: 6px 10px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
+      margin-bottom: 28px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .section-title {
+      margin: 0;
+      padding: 12px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    thead th {
+      background: var(--thead);
+      font-weight: 600;
+    }
+
+    tbody tr:hover {
+      background: var(--hover);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .loading {
+      padding: 10px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .error {
+      color: #a40000;
+      padding: 10px 0;
+      font-size: 14px;
+    }
+
+    .empty {
+      padding: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+  </style>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+    const supabaseUrl = 'https://ewiwcljtkxwntlajskri.supabase.co'
+    const supabaseKey = 'sb_publishable_nMpmbsOuz4l7mgLjC84tOw_cd88cuJ8'
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const ICON_8BALL = 'images/8-ball icon.png'
+    const ICON_9BALL = 'images/9-ball icon.png'
+
+    const FALLBACK_SEASONS = ['2026spring']
+
+    const seasonSelect = document.getElementById('season-select')
+    const loadingEl = document.getElementById('loading')
+    const errorEl = document.getElementById('error')
+    const matchesContainer = document.getElementById('matches-container')
+
+    let currentSeason = getQuerySeason() || FALLBACK_SEASONS[0]
+
+    function getQuerySeason() {
+      const params = new URLSearchParams(window.location.search)
+      return params.get('season')
+    }
+
+    function setQuerySeason(season) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('season', season)
+      window.history.replaceState({}, '', url)
+    }
+
+    seasonSelect.addEventListener('change', async (e) => {
+      currentSeason = e.target.value
+      setQuerySeason(currentSeason)
+      await refreshAll()
+    })
+
+    async function initSeasons() {
+      try {
+        const { data, error } = await supabase
+          .from('matches')
+          .select('season')
+          .neq('season', null)
+
+        if (error) throw error
+
+        const seasons = Array.from(new Set((data || []).map(r => r.season))).sort()
+        const list = seasons.length ? seasons : FALLBACK_SEASONS
+
+        seasonSelect.innerHTML = ''
+
+        for (const season of list) {
+          const option = document.createElement('option')
+          option.value = season
+          option.textContent = season
+          seasonSelect.appendChild(option)
+        }
+
+        if (!list.includes(currentSeason)) {
+          currentSeason = list[0]
+        }
+
+        seasonSelect.value = currentSeason
+      } catch (err) {
+        console.error(err)
+
+        seasonSelect.innerHTML = ''
+
+        for (const season of FALLBACK_SEASONS) {
+          const option = document.createElement('option')
+          option.value = season
+          option.textContent = season
+          seasonSelect.appendChild(option)
+        }
+
+        currentSeason = FALLBACK_SEASONS[0]
+        seasonSelect.value = currentSeason
+      }
+    }
+
+    async function refreshAll() {
+      loadingEl.textContent = 'Loading data…'
+      errorEl.textContent = ''
+      matchesContainer.innerHTML = ''
+
+      const { data, error } = await supabase
+        .from('matches')
+        .select('season, week, game_type, label, match_no, player, youtube_link')
+        .eq('season', currentSeason)
+        .order('week', { ascending: false })
+        .order('game_type', { ascending: true })
+        .order('match_no', { ascending: true })
+
+      loadingEl.textContent = ''
+
+      if (error) {
+        console.error(error)
+        errorEl.textContent = 'Error loading data: ' + error.message
+        return
+      }
+
+      renderTables(data || [])
+    }
+
+    function renderTables(matches) {
+      const eightBall = matches.filter(m => normalizeGameType(m.game_type) === '8ball')
+      const nineBall = matches.filter(m => normalizeGameType(m.game_type) === '9ball')
+
+      renderGameTable('8-ball', ICON_8BALL, eightBall)
+      renderGameTable('9-ball', ICON_9BALL, nineBall)
+    }
+
+    function normalizeGameType(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace('-', '')
+        .replace(' ', '')
+    }
+
+    function renderGameTable(title, icon, rows) {
+      const wrapper = document.createElement('div')
+      wrapper.className = 'table-wrapper'
+
+      wrapper.innerHTML = `
+        <div class="section-title">
+          <img src="${icon}" width="24" height="24" alt="${title}" />
+          <strong>${title}</strong>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Match No.</th>
+              <th>Player</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      `
+
+      const tbody = wrapper.querySelector('tbody')
+
+      if (!rows.length) {
+        const tr = document.createElement('tr')
+        tr.innerHTML = `<td colspan="2" class="empty">No matches found.</td>`
+        tbody.appendChild(tr)
+      } else {
+        for (const row of rows) {
+          const tr = document.createElement('tr')
+
+          const matchNo = document.createElement('td')
+          matchNo.textContent = row.match_no ?? '-'
+
+          const player = document.createElement('td')
+
+          if (row.youtube_link) {
+            const a = document.createElement('a')
+            a.href = row.youtube_link
+            a.target = '_blank'
+            a.rel = 'noopener noreferrer'
+            a.textContent = row.player || '-'
+            player.appendChild(a)
+          } else {
+            player.textContent = row.player || '-'
+          }
+
+          tr.appendChild(matchNo)
+          tr.appendChild(player)
+          tbody.appendChild(tr)
+        }
+      }
+
+      matchesContainer.appendChild(wrapper)
+    }
+
+    ;(async function start() {
+      await initSeasons()
+      await refreshAll()
+    })()
+  </script>
+</head>
+
+<body>
+  <header>
+    <div class="title">
+      <img src="images/8-ball icon.png" alt="8-ball" width="24" height="24" />
+      <img src="images/9-ball icon.png" alt="9-ball" width="24" height="24" />
+      <h1>Queen of Kings Matches</h1>
+    </div>
+
+    <div class="season-picker">
+      <label for="season-select">Season:</label>
+      <select id="season-select"></select>
+    </div>
+  </header>
+
+  <div id="loading" class="loading"></div>
+  <div id="error" class="error"></div>
+  <div id="matches-container"></div>
+</body>
+</html>
