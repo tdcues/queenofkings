@@ -126,12 +126,6 @@
       padding: 10px 0;
       font-size: 14px;
     }
-
-    .empty {
-      padding: 12px;
-      color: var(--muted);
-      font-size: 14px;
-    }
   </style>
 
   <script type="module">
@@ -237,14 +231,6 @@
       renderTables(data || [])
     }
 
-    function renderTables(matches) {
-      const eightBall = matches.filter(m => normalizeGameType(m.game_type) === '8ball')
-      const nineBall = matches.filter(m => normalizeGameType(m.game_type) === '9ball')
-
-      renderGameTable('8-ball', ICON_8BALL, eightBall)
-      renderGameTable('9-ball', ICON_9BALL, nineBall)
-    }
-
     function normalizeGameType(value) {
       return String(value || '')
         .toLowerCase()
@@ -252,12 +238,49 @@
         .replace(' ', '')
     }
 
-    function renderGameTable(title, icon, rows) {
+    function renderTables(matches) {
+      const grouped = {}
+
+      for (const m of matches) {
+        const key = `${m.week}__${m.game_type}__${m.label || ''}`
+
+        if (!grouped[key]) {
+          grouped[key] = []
+        }
+
+        grouped[key].push(m)
+      }
+
+      const keys = Object.keys(grouped).sort((a, b) => {
+        const wa = parseInt(a.split('__')[0] || '0', 10)
+        const wb = parseInt(b.split('__')[0] || '0', 10)
+        return wb - wa
+      })
+
+      for (const key of keys) {
+        const rows = grouped[key]
+        const [week, gameType, label] = key.split('__')
+        const normalized = normalizeGameType(gameType)
+
+        if (normalized === '8ball') {
+          renderGameTable(label || `Week ${week}`, '8-ball', ICON_8BALL, rows)
+        }
+
+        if (normalized === '9ball') {
+          renderGameTable(label || `Week ${week}`, '9-ball', ICON_9BALL, rows)
+        }
+      }
+    }
+
+    function renderGameTable(label, title, icon, rows) {
+      if (!rows || rows.length === 0) return
+
       const wrapper = document.createElement('div')
       wrapper.className = 'table-wrapper'
 
       wrapper.innerHTML = `
         <div class="section-title">
+          <strong>${label}</strong>
           <img src="${icon}" width="24" height="24" alt="${title}" />
           <strong>${title}</strong>
         </div>
@@ -274,34 +297,28 @@
 
       const tbody = wrapper.querySelector('tbody')
 
-      if (!rows.length) {
+      for (const row of rows) {
         const tr = document.createElement('tr')
-        tr.innerHTML = `<td colspan="2" class="empty">No matches found.</td>`
-        tbody.appendChild(tr)
-      } else {
-        for (const row of rows) {
-          const tr = document.createElement('tr')
 
-          const matchNo = document.createElement('td')
-          matchNo.textContent = row.match_no ?? '-'
+        const matchNo = document.createElement('td')
+        matchNo.textContent = row.match_no ?? '-'
 
-          const player = document.createElement('td')
+        const player = document.createElement('td')
 
-          if (row.youtube_link) {
-            const a = document.createElement('a')
-            a.href = row.youtube_link
-            a.target = '_blank'
-            a.rel = 'noopener noreferrer'
-            a.textContent = row.player || '-'
-            player.appendChild(a)
-          } else {
-            player.textContent = row.player || '-'
-          }
-
-          tr.appendChild(matchNo)
-          tr.appendChild(player)
-          tbody.appendChild(tr)
+        if (row.youtube_link) {
+          const a = document.createElement('a')
+          a.href = row.youtube_link
+          a.target = '_blank'
+          a.rel = 'noopener noreferrer'
+          a.textContent = row.player || '-'
+          player.appendChild(a)
+        } else {
+          player.textContent = row.player || '-'
         }
+
+        tr.appendChild(matchNo)
+        tr.appendChild(player)
+        tbody.appendChild(tr)
       }
 
       matchesContainer.appendChild(wrapper)
